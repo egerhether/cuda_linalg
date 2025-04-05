@@ -7,15 +7,15 @@ namespace linalg {
 
     class Vector {
         Matrix d_data;
-        int length;
+        int d_length;
 
     public:
-        Vector(float *d_data);
-        Vector(int length);
+        Vector(float *data, int size);
+        Vector(int length, float value);
         Vector(Matrix &matrix);
 
-        Vector &add(float value);
-        Vector &add(Vector &vector);
+        Vector add(float value);
+        Vector add(Vector &vector);
 
         float inner(Vector &vector);
         Matrix &outer(Vector &vector);

@@ -2,8 +2,10 @@
 #define MATRIX_INCLUDED
 
 namespace gpu {
-    __global__ void gpu_add(float *a, float *b, float *result, int N);
-    __global__ void gpu_mult(float *a, float *b, float *result, int N);
+    __global__ void add(float *a, float *b, float *result, int N);
+    __global__ void add(float *a, float b, float *result, int N);
+    __global__ void matmul(float *a, float *b, float *result, int N);
+    __global__ void fill(float *arr, float val, int N);
 }
 
 namespace linalg {
@@ -15,6 +17,8 @@ namespace linalg {
     public:
         Matrix(int rows, int columns, float value);
         Matrix(float *data, int rows, int columns);
+
+        ~Matrix();
 
         void inv();
 
