@@ -16,13 +16,6 @@ namespace gpu {
             result[idx] = a[idx] + b;
     }
 
-    __global__ void fill(float *arr, float val, int N)
-    {
-        int idx = blockDim.x * blockIdx.x + threadIdx.x;
-        if (idx < N)
-            arr[idx] = val;
-    }
-
     __global__ void matmul(float *a, float val, float *result, int N)
     {
         int idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -40,9 +33,25 @@ namespace gpu {
             float val = 0;
             for (int kdx = 0; kdx != d2; ++kdx)
                 val += a[idx * d2 + kdx] * b[kdx * d3 + jdx];
+
+            result[idx * d3 + jdx] = val;
         }
     }
 
+    __global__ void transpose(float *arr, float *target, int d1, int d2)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < d1 * d2) {
+            int new_idx = idx % d2;
+        }
+    }
+
+    __global__ void fill(float *arr, float val, int N)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < N)
+            arr[idx] = val;
+    }
     __global__ void copy(float *arr, float *target, int N)
     {
         int idx = blockDim.x * blockIdx.x + threadIdx.x;

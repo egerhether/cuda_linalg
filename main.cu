@@ -1,12 +1,25 @@
 #include "linalg/matrix.cuh"
 #include <iostream>
+#include <string>
 
 int main()
 {
-    linalg::Matrix a = linalg::Matrix(1000, 2000, 4.5);
-    linalg::Matrix b = linalg::Matrix(2000, 1000, 4.2);
+    try {
+        float data[] = { 1.2, 2.4, 1.1, 1.7, 5.3, 56.4 };
 
-    linalg::Matrix c = a.mult(b);
+        linalg::Matrix matrix(data, 3, 2);
+        linalg::Matrix matrix2(2, 3, 1.0);
 
-    std::cout << c.shape().first << ' ' << c.shape().second << '\n';
+        linalg::Matrix result = matrix * matrix2;
+
+        matrix.print();
+
+        matrix2.print();
+
+        result.print();
+
+    } catch (std::string e) {
+
+        std::cout << e << '\n';
+    }
 }
