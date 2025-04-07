@@ -56,6 +56,68 @@ namespace linalg {
         d_cuda = false;
     }
 
+    Matrix Matrix::inv()
+    {
+        if (d_cuda)
+            return gpu_inv();
+
+        return cpu_inv();
+    }
+
+    Matrix Matrix::gpu_inv()
+    {
+        Matrix mat(2, 2, 1.0);
+        return mat;
+    }
+
+    Matrix Matrix::cpu_inv()
+    {
+        if (d_shape.first != d_shape.second)
+            throw std::string("Matrix not invertible!");
+
+        int N = d_shape.first;
+
+        float *augmented = new float[N * N * 2];
+
+        // create augmented matrix [A, I] and temp matrix [A] for swapping later
+        for (int idx = 0; idx != N; ++idx)
+            for (int jdx = 0; jdx != N; ++jdx) {
+                augmented[idx * 2 * N + jdx] = at(idx, jdx);
+                augmented[idx * 2 * N + jdx + N] = (idx == jdx) ? 1 : 0;
+            }
+
+        for (int idx = 0; idx != N; ++idx) {
+
+            float pivot = augmented[idx * 2 * N + idx];
+            if (pivot == 0)
+                throw std::string("Matrix not invertible!");
+
+            for (int jdx = 0; jdx != 2 * N; ++jdx)
+                augmented[idx * 2 * N + jdx] /= pivot;
+
+            for (int kdx = 0; kdx != N; ++kdx) {
+                if (kdx == idx)
+                    continue;
+                float factor = augmented[kdx * 2 * N + idx];
+                for (int jdx = 0; jdx != 2 * N; ++jdx)
+                    augmented[kdx * 2 * N + jdx] -= factor * augmented[idx * 2 * N + jdx];
+            }
+        }
+
+        float *inv = new float[N * N];
+
+        for (int idx = 0; idx != N; ++idx)
+            for (int jdx = 0; jdx != N; ++jdx)
+                inv[idx * N + jdx] = augmented[idx * 2 * N + jdx + N];
+
+        Matrix inverse(inv, N, N);
+
+        delete[] augmented;
+        delete[] inv;
+
+        return inverse;
+    }
+
     Matrix Matrix::transpose()
     {
         if (d_cuda)
