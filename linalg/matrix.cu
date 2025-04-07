@@ -9,6 +9,7 @@ namespace linalg {
     {
         d_data = new float[rows * columns];
         d_shape = std::pair<int, int>(rows, columns);
+        gpu(); // by default initialize to operate on gpu
         fill(value);
     }
 
@@ -16,7 +17,28 @@ namespace linalg {
     {
         d_data = new float[rows * columns];
         d_shape = std::pair<int, int>(rows, columns);
+        gpu(); // by default initialize to operate on gpu
         copy(data);
+    }
+
+    Matrix::Matrix(Matrix const &other)
+    {
+        float *d_data = new float[other.shape().first * other.shape().second];
+        copy(other.get_data());
+        d_shape = other.shape();
+    }
+
+    Matrix &Matrix::operator=(Matrix const &other)
+    {
+        if (this != &other) {
+            delete[] d_data;
+
+            d_data = new float[other.shape().first * other.shape().second];
+            copy(other.get_data());
+            d_shape = other.shape();
+        }
+
+        return *this;
     }
 
     Matrix::~Matrix()
@@ -24,14 +46,37 @@ namespace linalg {
         delete[] d_data;
     }
 
-    Matrix Matrix::inv()
+    void Matrix::gpu()
     {
-        // TODO: write nice inverse
-        if (d_shape.first != d_shape.second)
-            throw std::string("Matrix is not invertible!");
+        d_cuda = true;
+    }
+
+    void Matrix::cpu()
+    {
+        d_cuda = false;
     }
 
     Matrix Matrix::transpose()
+    {
+        if (d_cuda)
+            return gpu_transpose();
+
+        return cpu_tranpose();
+    }
+
+    Matrix Matrix::cpu_tranpose()
+    {
+
+        Matrix transpose(d_shape.second, d_shape.first, 0.0);
+
+        for (int idx = 0; idx != d_shape.first; ++idx)
+            for (int jdx = 0; jdx != d_shape.second; ++jdx)
+                transpose.set(jdx, idx, at(idx, jdx));
+
+        return transpose;
+    }
+
+    Matrix Matrix::gpu_transpose()
     {
         int N = d_shape.first * d_shape.second;
         int block_rows = 8;
@@ -66,6 +111,27 @@ namespace linalg {
     }
 
     Matrix Matrix::add(float value)
+    {
+        if (d_cuda)
+            return gpu_add(value);
+
+        return cpu_add(value);
+    }
+
+    Matrix Matrix::cpu_add(float value)
+    {
+        int x = d_shape.first;
+        int y = d_shape.second;
+
+        Matrix result(x, y, 0.0);
+
+        for (int idx = 0; idx != x * y; ++idx)
+            result.set(idx, d_data[idx] + value);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_add(float value)
     {
         int N = d_shape.first * d_shape.second;
 
@@ -103,6 +169,32 @@ namespace linalg {
     }
 
     Matrix Matrix::add(Matrix &matrix)
+    {
+        if (d_cuda)
+            return gpu_add(matrix);
+
+        return cpu_add(matrix);
+    }
+
+    Matrix Matrix::cpu_add(Matrix &matrix)
+    {
+        if (d_shape != matrix.shape())
+            throw std::string("Matrix dimensions must match for addition!");
+
+        int x = d_shape.first;
+        int y = d_shape.second;
+
+        Matrix result(x, y, 0.0);
+
+        float *matrix_data = matrix.get_data();
+
+        for (int idx = 0; idx != x * y; ++idx)
+            result.set(idx, matrix_data[idx] + d_data[idx]);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_add(Matrix &matrix)
     {
         int N = d_shape.first * d_shape.second;
 
@@ -161,6 +253,26 @@ namespace linalg {
 
     Matrix Matrix::mult(float value)
     {
+        if (d_cuda)
+            return gpu_mult(value);
+
+        return cpu_mult(value);
+    }
+
+    Matrix Matrix::cpu_mult(float value)
+    {
+
+        Matrix result(d_shape.first, d_shape.second, 0.0);
+
+        for (int idx = 0; idx != d_shape.first; ++idx)
+            for (int jdx = 0; jdx != d_shape.second; ++jdx)
+                result.set(idx, jdx, at(idx, jdx) * value);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_mult(float value)
+    {
         int N = d_shape.first * d_shape.second;
 
         float *c = new float[N];
@@ -197,6 +309,34 @@ namespace linalg {
     }
 
     Matrix Matrix::mult(Matrix &matrix)
+    {
+        if (d_cuda)
+            return gpu_mult(matrix);
+
+        return cpu_mult(matrix);
+    }
+
+    // TODO: later - make it more efficient!
+    Matrix Matrix::cpu_mult(Matrix &matrix)
+    {
+        if (d_shape.second != matrix.shape().first)
+            throw std::string("Inner dimensions must match for matmul!");
+
+        Matrix result(d_shape.first, matrix.shape().second, 0.0);
+
+        for (int idx = 0; idx != d_shape.first; ++idx) {
+            for (int jdx = 0; jdx != matrix.shape().second; ++jdx) {
+                float sum = 0;
+                for (int kdx = 0; kdx != d_shape.second; ++kdx)
+                    sum += at(idx, kdx) * matrix.at(kdx, jdx);
+                result.set(idx, jdx, sum);
+            };
+        }
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_mult(Matrix &matrix)
     {
 
         if (d_shape.second != matrix.shape().first)
@@ -289,12 +429,12 @@ namespace linalg {
         return sum / N;
     }
 
-    float *Matrix::get_data()
+    float *Matrix::get_data() const
     {
         return d_data;
     }
 
-    std::pair<int, int> &Matrix::shape()
+    std::pair<int, int> const &Matrix::shape() const
     {
         return d_shape;
     }
@@ -362,6 +502,20 @@ namespace linalg {
             std::cout << "]\n";
         }
         std::cout << '\n';
+    }
+
+    void Matrix::set(int idx, float value)
+    {
+        if (idx >= d_shape.first * d_shape.second)
+            throw std::string("Index accessed out of range!");
+        d_data[idx] = value;
+    }
+
+    void Matrix::set(int row, int column, float value)
+    {
+        if (row * d_shape.second + column >= d_shape.first * d_shape.second)
+            throw std::string("Index accessed out of range");
+        d_data[row * d_shape.second + column] = value;
     }
 
 }

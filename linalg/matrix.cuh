@@ -16,10 +16,14 @@ namespace linalg {
 
         float *d_data;
         std::pair<int, int> d_shape;
+        bool d_cuda;
 
     public:
         Matrix(int rows, int columns, float value);
         Matrix(float *data, int rows, int columns);
+        Matrix(Matrix const &other);
+
+        Matrix &operator=(Matrix const &other);
 
         ~Matrix();
 
@@ -41,13 +45,34 @@ namespace linalg {
         // utils and such
         void fill(float value);
         float mean();
-        std::pair<int, int> &shape();
+        std::pair<int, int> const &shape() const;
         void print();
+        void set(int idx, float value);
+        void set(int row, int column, float value);
 
-        float *get_data();
+        float *get_data() const;
+
+        void gpu();
+        void cpu();
 
     private:
         void copy(float *data);
+
+        Matrix cpu_inv();
+        Matrix gpu_inv();
+
+        Matrix cpu_tranpose();
+        Matrix gpu_transpose();
+
+        Matrix cpu_add(float value);
+        Matrix cpu_add(Matrix &matrix);
+        Matrix gpu_add(float value);
+        Matrix gpu_add(Matrix &matrix);
+
+        Matrix cpu_mult(float value);
+        Matrix cpu_mult(Matrix &matrix);
+        Matrix gpu_mult(float value);
+        Matrix gpu_mult(Matrix &matrix);
     };
 }
 

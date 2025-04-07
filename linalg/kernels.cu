@@ -25,6 +25,7 @@ namespace gpu {
     }
 
     // a is of dimensions [d1, d2], b is of dimensions [d2, d3]
+    // TODO: improve this using shared memoery!
     __global__ void matmul(float *a, float *b, float *result, int d1, int d2, int d3)
     {
         int idx = blockDim.y * blockIdx.y + threadIdx.y;
