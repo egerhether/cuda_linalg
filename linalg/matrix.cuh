@@ -6,7 +6,7 @@ namespace gpu {
     __global__ void add(float *a, float b, float *result, int N);
     __global__ void matmul(float *a, float val, float *result, int N);
     __global__ void matmul(float *a, float *b, float *result, int d1, int d2, int d3);
-    __global__ void transpose(float *arr, float *target, int N);
+    __global__ void transpose(float *arr, float *target, int d1, int d2, int block_rows);
     __global__ void fill(float *arr, float val, int N);
     __global__ void copy(float *arr, float *target, int N);
 }
@@ -23,8 +23,8 @@ namespace linalg {
 
         ~Matrix();
 
-        void inv();
-        void transpose();
+        Matrix inv();
+        Matrix transpose();
 
         Matrix add(float value);
         Matrix add(Matrix &matrix);

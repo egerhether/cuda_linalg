@@ -24,13 +24,45 @@ namespace linalg {
         delete[] d_data;
     }
 
-    void Matrix::inv()
+    Matrix Matrix::inv()
     {
         // TODO: write nice inverse
+        if (d_shape.first != d_shape.second)
+            throw std::string("Matrix is not invertible!");
     }
 
-    void Matrix::transpose()
+    Matrix Matrix::transpose()
     {
+        int N = d_shape.first * d_shape.second;
+        int block_rows = 8;
+
+        float *c = new float[N];
+
+        float *cuda_a, *cuda_c;
+
+        cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_c, N * sizeof(float));
+
+        err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+
+        dim3 dimBlock(32, block_rows, 1);
+        dim3 dimGrid((d_shape.second * 32 - 1) / 32, (d_shape.first + 32 - 1) / 32, 1);
+
+        gpu::transpose<<<dimGrid, dimBlock>>>(cuda_a, cuda_c, d_shape.first, d_shape.second, block_rows);
+
+        err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
+        cuda_check(err);
+
+        Matrix result = Matrix(c, d_shape.second, d_shape.first);
+
+        delete[] c;
+
+        cudaFree(cuda_a);
+        cudaFree(cuda_c);
+
+        return result;
     }
 
     Matrix Matrix::add(float value)
@@ -297,8 +329,23 @@ namespace linalg {
 
     void Matrix::print()
     {
-        if (d_shape.first * d_shape.second > 20) {
-            // figure out what to do for large matrices
+        std::cout << '\n';
+        if (d_shape.first * d_shape.second > 25) {
+            std::cout << '[';
+            for (int idx = 0; idx != 3; ++idx) {
+                std::cout << '[';
+                for (int jdx = 0; jdx != 3; ++jdx) {
+                    std::cout << at(idx, jdx) << ", ";
+                }
+                std::cout << "... " << at(idx, d_shape.second - 1) << "]\n";
+            }
+            std::cout << "...\n[";
+            for (int jdx = 0; jdx != 3; ++jdx) {
+                std::cout << at(d_shape.first - 1, jdx) << ", ";
+            }
+            std::cout << "... " << at(d_shape.first - 1, d_shape.second - 1) << "]],";
+            std::cout << " shape: (" << d_shape.first << ", " << d_shape.second << ")\n";
+
         } else {
             std::cout << '[';
             for (int idx = 0; idx != d_shape.first; ++idx) {
@@ -314,6 +361,7 @@ namespace linalg {
             }
             std::cout << "]\n";
         }
+        std::cout << '\n';
     }
 
 }

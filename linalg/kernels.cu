@@ -1,4 +1,5 @@
 #include "matrix.cuh"
+#include <cooperative_groups.h>
 
 namespace gpu {
 
@@ -38,12 +39,24 @@ namespace gpu {
         }
     }
 
-    __global__ void transpose(float *arr, float *target, int d1, int d2)
+    // matrix of dimensions [d1, d2]
+    __global__ void transpose(float *arr, float *target, int d1, int d2, int block_rows)
     {
-        int idx = blockDim.x * blockIdx.x + threadIdx.x;
-        if (idx < d1 * d2) {
-            int new_idx = idx % d2;
-        }
+        // using 32 as tile size as gpus optimized for this size of threads
+        __shared__ float tile[32 * 32];
+        int idx = blockIdx.x * 32 + threadIdx.y;
+        int jdx = blockIdx.y * 32 + threadIdx.x;
+
+        for (int kdx = 0; kdx != 32; kdx += block_rows)
+            if (idx < d2 && (jdx + kdx) < d1)
+                tile[(threadIdx.y + kdx) * 32 + threadIdx.x] = arr[(jdx + kdx) * d2 + idx];
+
+        cooperative_groups::thread_block block = cooperative_groups::this_thread_block();
+        cooperative_groups::sync(block);
+
+        for (int kdx = 0; kdx != 32; kdx += block_rows)
+            if (idx < d2 && (jdx + kdx) < d1)
+                target[idx * d1 + jdx + kdx] = tile[(threadIdx.y + kdx) * 32 + threadIdx.x];
     }
 
     __global__ void fill(float *arr, float val, int N)

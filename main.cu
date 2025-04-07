@@ -8,9 +8,9 @@ int main()
         float data[] = { 1.2, 2.4, 1.1, 1.7, 5.3, 56.4 };
 
         linalg::Matrix matrix(data, 3, 2);
-        linalg::Matrix matrix2(2, 3, 1.0);
+        linalg::Matrix matrix2(6, 6, 1.0);
 
-        linalg::Matrix result = matrix * matrix2;
+        linalg::Matrix result = matrix.transpose();
 
         matrix.print();
 
