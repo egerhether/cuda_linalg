@@ -66,8 +66,59 @@ namespace linalg {
 
     Matrix Matrix::gpu_inv()
     {
-        Matrix mat(2, 2, 1.0);
-        return mat;
+
+        if (d_shape.first != d_shape.second)
+            throw std::string("Matrix not invertible!");
+
+        int N = d_shape.first;
+
+        float *cuda_a, *cuda_augmented;
+
+        cudaError_t err = cudaMalloc(&cuda_a, N * N * sizeof(float));
+        cuda_check(err, __FILE__, __LINE__);
+        err = cudaMalloc(&cuda_augmented, N * N * 2 * sizeof(float));
+        cuda_check(err, __FILE__, __LINE__);
+
+        err = cudaMemcpy(cuda_a, d_data, N * N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err, __FILE__, __LINE__);
+
+        int threads = (N > 16) ? 16 : N;
+        dim3 block_size(threads, threads);
+        dim3 grid_size((N + threads - 1) / threads, (N + threads - 1) / threads);
+
+        // create augmented matrix [A, I]
+        gpu::augmented<<<grid_size, block_size>>>(cuda_a, cuda_augmented, N);
+        cudaDeviceSynchronize();
+
+        block_size = dim3(2 * threads, threads);
+
+        for (int idx = 0; idx != N; ++idx) {
+            // divide by pivot
+            gpu::pivot<<<grid_size, block_size>>>(cuda_augmented, N, idx);
+            cudaDeviceSynchronize();
+
+            // perform gauss jordan
+            gpu::inv<<<grid_size, block_size>>>(cuda_augmented, N, idx);
+            cudaDeviceSynchronize();
+        }
+
+        // copy back to NxN array
+        gpu::copy_from_aug<<<grid_size, block_size>>>(cuda_augmented, cuda_a, N);
+        cudaDeviceSynchronize();
+
+        float *inv = new float[N * N];
+
+        err = cudaMemcpy(inv, cuda_a, N * N * sizeof(float), cudaMemcpyDeviceToHost);
+        cuda_check(err, __FILE__, __LINE__);
+
+        Matrix inverse(inv, d_shape.first, d_shape.second);
+
+        delete[] inv;
+
+        cudaFree(cuda_a);
+        cudaFree(cuda_augmented);
+
+        return inverse;
     }
 
     Matrix Matrix::cpu_inv()
@@ -79,7 +130,7 @@ namespace linalg {
 
         float *augmented = new float[N * N * 2];
 
-        // create augmented matrix [A, I] and temp matrix [A] for swapping later
+        // create augmented matrix [A, I]
         for (int idx = 0; idx != N; ++idx)
             for (int jdx = 0; jdx != N; ++jdx) {
                 augmented[idx * 2 * N + jdx] = at(idx, jdx);
@@ -148,19 +199,19 @@ namespace linalg {
         float *cuda_a, *cuda_c;
 
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
+        cuda_check(err, __FILE__, __LINE__);
 
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         dim3 dimBlock(32, block_rows, 1);
-        dim3 dimGrid((d_shape.second * 32 - 1) / 32, (d_shape.first + 32 - 1) / 32, 1);
+        dim3 dimGrid((d_shape.second + 32 - 1) / 32, (d_shape.first + 32 - 1) / 32, 1);
 
         gpu::transpose<<<dimGrid, dimBlock>>>(cuda_a, cuda_c, d_shape.first, d_shape.second, block_rows);
-
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.second, d_shape.first);
 
@@ -203,13 +254,13 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -218,7 +269,7 @@ namespace linalg {
         gpu::add<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -269,17 +320,17 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_b, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMemcpy(cuda_b, matrix.get_data(), N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -287,10 +338,10 @@ namespace linalg {
 
         gpu::add<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
         err = cudaGetLastError();
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -344,13 +395,13 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -359,7 +410,7 @@ namespace linalg {
         gpu::sub<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -410,17 +461,17 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_b, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMemcpy(cuda_b, matrix.get_data(), N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -428,10 +479,10 @@ namespace linalg {
 
         gpu::sub<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
         err = cudaGetLastError();
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -484,13 +535,13 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -499,7 +550,7 @@ namespace linalg {
         gpu::matmul<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -555,23 +606,23 @@ namespace linalg {
         float *cuda_a, *cuda_b, *cuda_c;
 
         cudaError_t err = cudaMalloc(&cuda_a, Na * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_b, Nb * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, Nc * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         err = cudaMemcpy(cuda_a, d_data, Na * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMemcpy(cuda_b, matrix.get_data(), Nb * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         dim3 dim_block(32, 32, 1);
         dim3 dim_grid(ceil(Nc / 32.0), ceil(Na / 32.0), 1);
         gpu::matmul<<<dim_grid, dim_block>>>(cuda_a, cuda_b, cuda_c, d_shape.first, d_shape.second, matrix.shape().second);
 
         err = cudaMemcpy(c, cuda_c, Nc * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, matrix.shape().second);
 
@@ -625,13 +676,13 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -640,7 +691,7 @@ namespace linalg {
         gpu::div<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -691,17 +742,17 @@ namespace linalg {
 
         // memory alloc on gpu
         cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_b, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMalloc(&cuda_c, N * sizeof(float));
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // copy vectors to gpu
         err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
         err = cudaMemcpy(cuda_b, matrix.get_data(), N * sizeof(float), cudaMemcpyHostToDevice);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         // initialize size of gpu to run on
         int threads = 32;
@@ -709,10 +760,10 @@ namespace linalg {
 
         gpu::div<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
         err = cudaGetLastError();
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
-        cuda_check(err);
+        cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, d_shape.second);
 
@@ -743,14 +794,14 @@ namespace linalg {
             float *cuda_arr;
 
             cudaError_t err = cudaMalloc(&cuda_arr, N * sizeof(float));
-            cuda_check(err);
+            cuda_check(err, __FILE__, __LINE__);
 
             int threads = 32;
             int blocks = ceil(float(N) / threads);
             gpu::fill<<<blocks, threads>>>(cuda_arr, value, N);
 
             err = cudaMemcpy(d_data, cuda_arr, N * sizeof(float), cudaMemcpyDeviceToHost);
-            cuda_check(err);
+            cuda_check(err, __FILE__, __LINE__);
 
             cudaFree(cuda_arr);
         } else
@@ -790,19 +841,19 @@ namespace linalg {
             float *cuda_arr, *cuda_target;
 
             cudaError_t err = cudaMalloc(&cuda_arr, N * sizeof(float));
-            cuda_check(err);
+            cuda_check(err, __FILE__, __LINE__);
             err = cudaMalloc(&cuda_target, N * sizeof(float));
-            cuda_check(err);
+            cuda_check(err, __FILE__, __LINE__);
 
             err = cudaMemcpy(cuda_arr, data, N * sizeof(float), cudaMemcpyHostToDevice);
-            cuda_check(err);
+            cuda_check(err, __FILE__, __LINE__);
 
             int threads = 32;
             int blocks = ceil(float(N) / threads);
             gpu::copy<<<blocks, threads>>>(cuda_arr, cuda_target, N);
 
             err = cudaMemcpy(d_data, cuda_target, N * sizeof(float), cudaMemcpyDeviceToHost);
-            cuda_check(err);
+            cuda_check(err, __FILE__, __LINE__);
 
             cudaFree(cuda_arr);
             cudaFree(cuda_target);
