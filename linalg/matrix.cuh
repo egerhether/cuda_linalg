@@ -62,7 +62,11 @@ namespace linalg {
 
         // utils and such
         void fill(float value);
+        void fill_random();
         float mean();
+        float norm();
+        float max();
+        float min();
         std::pair<int, int> const &shape() const;
         void print();
         void set(int idx, float value);

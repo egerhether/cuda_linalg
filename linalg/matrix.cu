@@ -1,6 +1,8 @@
 #include "cuda_utils.cuh"
 #include "matrix.cuh"
+#include <cmath>
 #include <iostream>
+#include <random>
 #include <string>
 
 namespace linalg {
@@ -210,6 +212,8 @@ namespace linalg {
         dim3 dimGrid((d_shape.second + 32 - 1) / 32, (d_shape.first + 32 - 1) / 32, 1);
 
         gpu::transpose<<<dimGrid, dimBlock>>>(cuda_a, cuda_c, d_shape.first, d_shape.second, block_rows);
+        cudaDeviceSynchronize();
+
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
         cuda_check(err, __FILE__, __LINE__);
 
@@ -478,8 +482,6 @@ namespace linalg {
         int blocks = ceil(float(N) / threads);
 
         gpu::sub<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
-        err = cudaGetLastError();
-        cuda_check(err, __FILE__, __LINE__);
 
         err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
         cuda_check(err, __FILE__, __LINE__);
@@ -809,6 +811,16 @@ namespace linalg {
                 d_data[idx] = value;
     }
 
+    void Matrix::fill_random()
+    {
+        int N = d_shape.first * d_shape.second;
+        std::default_random_engine gen;
+        std::uniform_real_distribution<float> uniform(0.0, 10.0);
+
+        for (int idx = 0; idx != N; ++idx)
+            d_data[idx] = uniform(gen);
+    }
+
     float Matrix::at(int row, int column)
     {
         return d_data[row * d_shape.second + column];
@@ -822,6 +834,40 @@ namespace linalg {
             sum += d_data[idx];
 
         return sum / N;
+    }
+
+    float Matrix::norm()
+    {
+        int N = d_shape.first * d_shape.second;
+        float sum = 0.0;
+        for (int idx = 0; idx != N; ++idx)
+            sum += d_data[idx] * d_data[idx];
+
+        float norm = std::sqrt(sum);
+        return norm;
+    }
+
+    float Matrix::max()
+    {
+        float max = 0;
+        int N = d_shape.first * d_shape.second;
+        for (int idx = 0; idx != N; ++idx) {
+            if (d_data[idx] > max)
+                max = d_data[idx];
+        }
+
+        return max;
+    }
+
+    float Matrix::min()
+    {
+        float min = 1 >> 10;
+        int N = d_shape.first * d_shape.second;
+        for (int idx = 0; idx != N; ++idx)
+            if (d_data[idx] < min)
+                min = d_data[idx];
+
+        return min;
     }
 
     float *Matrix::get_data() const

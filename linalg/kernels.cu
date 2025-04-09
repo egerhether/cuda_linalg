@@ -22,7 +22,7 @@ namespace gpu {
     {
         int idx = blockDim.x * blockIdx.x + threadIdx.x;
         if (idx < N)
-            result[idx] = a[idx] = b[idx];
+            result[idx] = a[idx] - b[idx];
     }
 
     __global__ void sub(float *a, float b, float *result, int N)
@@ -73,20 +73,23 @@ namespace gpu {
     __global__ void transpose(float *arr, float *target, int d1, int d2, int block_rows)
     {
         // using 32 as tile size as gpus optimized for this size of threads
-        __shared__ float tile[32 * 32];
-        int idx = blockIdx.x * 32 + threadIdx.y;
-        int jdx = blockIdx.y * 32 + threadIdx.x;
+        __shared__ float tile[32][32];
+        int idx = blockIdx.x * 32 + threadIdx.x;
+        int jdx = blockIdx.y * 32 + threadIdx.y;
 
-        for (int kdx = 0; kdx != 32; kdx += block_rows)
+        for (int kdx = 0; kdx < 32; kdx += block_rows)
             if (idx < d2 && (jdx + kdx) < d1)
-                tile[(threadIdx.y + kdx) * 32 + threadIdx.x] = arr[(jdx + kdx) * d2 + idx];
+                tile[(threadIdx.y + kdx)][threadIdx.x] = arr[(jdx + kdx) * d2 + idx];
 
         cooperative_groups::thread_block block = cooperative_groups::this_thread_block();
         cooperative_groups::sync(block);
 
-        for (int kdx = 0; kdx != 32; kdx += block_rows)
-            if (idx < d2 && (jdx + kdx) < d1)
-                target[idx * d1 + jdx + kdx] = tile[(threadIdx.y + kdx) * 32 + threadIdx.x];
+        idx = blockIdx.y * 32 + threadIdx.x;
+        jdx = blockIdx.x * 32 + threadIdx.y;
+
+        for (int kdx = 0; kdx < 32; kdx += block_rows)
+            if (idx < d1 && (jdx + kdx) < d2)
+                target[(jdx + kdx) * d1 + idx] = tile[threadIdx.x][threadIdx.y + kdx];
     }
 
     __global__ void augmented(float *arr, float *target, int N)
