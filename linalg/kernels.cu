@@ -17,6 +17,20 @@ namespace gpu {
             result[idx] = a[idx] + b;
     }
 
+    __global__ void sub(float *a, float *b, float *result, int N)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < N)
+            result[idx] = a[idx] = b[idx];
+    }
+
+    __global__ void sub(float *a, float b, float *result, int N)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < N)
+            result[idx] = a[idx] - b;
+    }
+
     __global__ void matmul(float *a, float val, float *result, int N)
     {
         int idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -38,6 +52,20 @@ namespace gpu {
 
             result[idx * d3 + jdx] = val;
         }
+    }
+
+    __global__ void div(float *a, float val, float *result, int N)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < N)
+            result[idx] = a[idx] / val;
+    }
+
+    __global__ void div(float *a, float *b, float *result, int N)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < N)
+            result[idx] = a[idx] / b[idx];
     }
 
     // matrix of dimensions [d1, d2]

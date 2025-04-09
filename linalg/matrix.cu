@@ -212,7 +212,7 @@ namespace linalg {
         cuda_check(err);
 
         // initialize size of gpu to run on
-        int threads = 256;
+        int threads = 32;
         int blocks = ceil(float(N) / threads);
 
         gpu::add<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
@@ -282,7 +282,7 @@ namespace linalg {
         cuda_check(err);
 
         // initialize size of gpu to run on
-        int threads = 256;
+        int threads = 32;
         int blocks = ceil(float(N) / threads);
 
         gpu::add<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
@@ -311,6 +311,147 @@ namespace linalg {
     Matrix Matrix::operator+(Matrix &matrix)
     {
         return add(matrix);
+    }
+
+    Matrix Matrix::sub(float value)
+    {
+        if (d_cuda)
+            return gpu_sub(value);
+
+        return cpu_sub(value);
+    }
+
+    Matrix Matrix::cpu_sub(float value)
+    {
+        int x = d_shape.first;
+        int y = d_shape.second;
+
+        Matrix result(x, y, 0.0);
+
+        for (int idx = 0; idx != x * y; ++idx)
+            result.set(idx, d_data[idx] - value);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_sub(float value)
+    {
+        int N = d_shape.first * d_shape.second;
+
+        float *c = new float[N];
+
+        float *cuda_a, *cuda_c;
+
+        // memory alloc on gpu
+        cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_c, N * sizeof(float));
+        cuda_check(err);
+
+        // copy vectors to gpu
+        err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+
+        // initialize size of gpu to run on
+        int threads = 32;
+        int blocks = ceil(float(N) / threads);
+
+        gpu::sub<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
+
+        err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
+        cuda_check(err);
+
+        Matrix result = Matrix(c, d_shape.first, d_shape.second);
+
+        delete[] c;
+
+        cudaFree(cuda_a);
+        cudaFree(cuda_c);
+
+        return result;
+    }
+
+    Matrix Matrix::sub(Matrix &matrix)
+    {
+        if (d_cuda)
+            return gpu_sub(matrix);
+
+        return cpu_sub(matrix);
+    }
+
+    Matrix Matrix::cpu_sub(Matrix &matrix)
+    {
+        if (d_shape != matrix.shape())
+            throw std::string("Matrix dimensions must match for subtraction!");
+
+        int x = d_shape.first;
+        int y = d_shape.second;
+
+        Matrix result(x, y, 0.0);
+
+        float *matrix_data = matrix.get_data();
+
+        for (int idx = 0; idx != x * y; ++idx)
+            result.set(idx, matrix_data[idx] - d_data[idx]);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_sub(Matrix &matrix)
+    {
+        int N = d_shape.first * d_shape.second;
+
+        if (d_shape != matrix.shape())
+            throw std::string("Matrix dimensions must match for addition!");
+
+        float *c = new float[N];
+
+        float *cuda_a, *cuda_b, *cuda_c;
+
+        // memory alloc on gpu
+        cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_b, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_c, N * sizeof(float));
+        cuda_check(err);
+
+        // copy vectors to gpu
+        err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+        err = cudaMemcpy(cuda_b, matrix.get_data(), N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+
+        // initialize size of gpu to run on
+        int threads = 32;
+        int blocks = ceil(float(N) / threads);
+
+        gpu::sub<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
+        err = cudaGetLastError();
+        cuda_check(err);
+
+        err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
+        cuda_check(err);
+
+        Matrix result = Matrix(c, d_shape.first, d_shape.second);
+
+        delete[] c;
+
+        cudaFree(cuda_a);
+        cudaFree(cuda_b);
+        cudaFree(cuda_c);
+
+        return result;
+    }
+
+    Matrix Matrix::operator-(float value)
+    {
+        return sub(value);
+    }
+
+    Matrix Matrix::operator-(Matrix &matrix)
+    {
+        return sub(matrix);
     }
 
     Matrix Matrix::mult(float value)
@@ -352,7 +493,7 @@ namespace linalg {
         cuda_check(err);
 
         // initialize size of gpu to run on
-        int threads = 256;
+        int threads = 32;
         int blocks = ceil(float(N) / threads);
 
         gpu::matmul<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
@@ -453,6 +594,147 @@ namespace linalg {
         return mult(matrix);
     }
 
+    Matrix Matrix::div(float value)
+    {
+        if (d_cuda)
+            return gpu_div(value);
+
+        return cpu_div(value);
+    }
+
+    Matrix Matrix::cpu_div(float value)
+    {
+        int x = d_shape.first;
+        int y = d_shape.second;
+
+        Matrix result(x, y, 0.0);
+
+        for (int idx = 0; idx != x * y; ++idx)
+            result.set(idx, d_data[idx] / value);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_div(float value)
+    {
+        int N = d_shape.first * d_shape.second;
+
+        float *c = new float[N];
+
+        float *cuda_a, *cuda_c;
+
+        // memory alloc on gpu
+        cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_c, N * sizeof(float));
+        cuda_check(err);
+
+        // copy vectors to gpu
+        err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+
+        // initialize size of gpu to run on
+        int threads = 32;
+        int blocks = ceil(float(N) / threads);
+
+        gpu::div<<<blocks, threads>>>(cuda_a, value, cuda_c, N);
+
+        err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
+        cuda_check(err);
+
+        Matrix result = Matrix(c, d_shape.first, d_shape.second);
+
+        delete[] c;
+
+        cudaFree(cuda_a);
+        cudaFree(cuda_c);
+
+        return result;
+    }
+
+    Matrix Matrix::div(Matrix &matrix)
+    {
+        if (d_cuda)
+            return gpu_div(matrix);
+
+        return cpu_div(matrix);
+    }
+
+    Matrix Matrix::cpu_div(Matrix &matrix)
+    {
+        if (d_shape != matrix.shape())
+            throw std::string("Matrix dimensions must match for division!");
+
+        int x = d_shape.first;
+        int y = d_shape.second;
+
+        Matrix result(x, y, 0.0);
+
+        float *matrix_data = matrix.get_data();
+
+        for (int idx = 0; idx != x * y; ++idx)
+            result.set(idx, matrix_data[idx] / d_data[idx]);
+
+        return result;
+    }
+
+    Matrix Matrix::gpu_div(Matrix &matrix)
+    {
+        int N = d_shape.first * d_shape.second;
+
+        if (d_shape != matrix.shape())
+            throw std::string("Matrix dimensions must match for division!");
+
+        float *c = new float[N];
+
+        float *cuda_a, *cuda_b, *cuda_c;
+
+        // memory alloc on gpu
+        cudaError_t err = cudaMalloc(&cuda_a, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_b, N * sizeof(float));
+        cuda_check(err);
+        err = cudaMalloc(&cuda_c, N * sizeof(float));
+        cuda_check(err);
+
+        // copy vectors to gpu
+        err = cudaMemcpy(cuda_a, d_data, N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+        err = cudaMemcpy(cuda_b, matrix.get_data(), N * sizeof(float), cudaMemcpyHostToDevice);
+        cuda_check(err);
+
+        // initialize size of gpu to run on
+        int threads = 32;
+        int blocks = ceil(float(N) / threads);
+
+        gpu::div<<<blocks, threads>>>(cuda_a, cuda_b, cuda_c, N);
+        err = cudaGetLastError();
+        cuda_check(err);
+
+        err = cudaMemcpy(c, cuda_c, N * sizeof(float), cudaMemcpyDeviceToHost);
+        cuda_check(err);
+
+        Matrix result = Matrix(c, d_shape.first, d_shape.second);
+
+        delete[] c;
+
+        cudaFree(cuda_a);
+        cudaFree(cuda_b);
+        cudaFree(cuda_c);
+
+        return result;
+    }
+
+    Matrix Matrix::operator/(float value)
+    {
+        return div(value);
+    }
+
+    Matrix Matrix::operator/(Matrix &matrix)
+    {
+        return div(matrix);
+    }
+
     void Matrix::fill(float value)
     {
         int N = d_shape.first * d_shape.second;
@@ -463,7 +745,7 @@ namespace linalg {
             cudaError_t err = cudaMalloc(&cuda_arr, N * sizeof(float));
             cuda_check(err);
 
-            int threads = 256;
+            int threads = 32;
             int blocks = ceil(float(N) / threads);
             gpu::fill<<<blocks, threads>>>(cuda_arr, value, N);
 
@@ -515,7 +797,7 @@ namespace linalg {
             err = cudaMemcpy(cuda_arr, data, N * sizeof(float), cudaMemcpyHostToDevice);
             cuda_check(err);
 
-            int threads = 256;
+            int threads = 32;
             int blocks = ceil(float(N) / threads);
             gpu::copy<<<blocks, threads>>>(cuda_arr, cuda_target, N);
 
