@@ -84,7 +84,7 @@ namespace linalg {
         err = cudaMemcpy(cuda_a, d_data, N * N * sizeof(float), cudaMemcpyHostToDevice);
         cuda_check(err, __FILE__, __LINE__);
 
-        int threads = (N > 16) ? 16 : N;
+        int threads = (N > 32) ? 32 : N;
         dim3 block_size(threads, threads);
         dim3 grid_size((N + threads - 1) / threads, (N + threads - 1) / threads);
 
@@ -96,7 +96,8 @@ namespace linalg {
 
         for (int idx = 0; idx != N; ++idx) {
             // divide by pivot
-            gpu::pivot<<<grid_size, block_size>>>(cuda_augmented, N, idx);
+            int blocks = (2 * N * N + 32 - 1) / 32;
+            gpu::pivot<<<blocks, 32>>>(cuda_augmented, N, idx);
             cudaDeviceSynchronize();
 
             // perform gauss jordan
@@ -599,31 +600,31 @@ namespace linalg {
             throw std::string("Inner dimensions must match for matmul!");
 
         // sizes of each matrix involved
-        int Na = d_shape.first * d_shape.second;
-        int Nb = matrix.shape().first * matrix.shape().second;
-        int Nc = d_shape.first * matrix.shape().second;
+        int d1 = d_shape.first;
+        int d2 = d_shape.second;
+        int d3 = matrix.shape().second;
 
-        float *c = new float[Nc];
+        float *c = new float[d1 * d3];
 
         float *cuda_a, *cuda_b, *cuda_c;
 
-        cudaError_t err = cudaMalloc(&cuda_a, Na * sizeof(float));
+        cudaError_t err = cudaMalloc(&cuda_a, d1 * d2 * sizeof(float));
         cuda_check(err, __FILE__, __LINE__);
-        err = cudaMalloc(&cuda_b, Nb * sizeof(float));
+        err = cudaMalloc(&cuda_b, d2 * d3 * sizeof(float));
         cuda_check(err, __FILE__, __LINE__);
-        err = cudaMalloc(&cuda_c, Nc * sizeof(float));
+        err = cudaMalloc(&cuda_c, d1 * d3 * sizeof(float));
         cuda_check(err, __FILE__, __LINE__);
 
-        err = cudaMemcpy(cuda_a, d_data, Na * sizeof(float), cudaMemcpyHostToDevice);
+        err = cudaMemcpy(cuda_a, d_data, d1 * d2 * sizeof(float), cudaMemcpyHostToDevice);
         cuda_check(err, __FILE__, __LINE__);
-        err = cudaMemcpy(cuda_b, matrix.get_data(), Nb * sizeof(float), cudaMemcpyHostToDevice);
+        err = cudaMemcpy(cuda_b, matrix.get_data(), d2 * d3 * sizeof(float), cudaMemcpyHostToDevice);
         cuda_check(err, __FILE__, __LINE__);
 
         dim3 dim_block(32, 32, 1);
-        dim3 dim_grid(ceil(Nc / 32.0), ceil(Na / 32.0), 1);
-        gpu::matmul<<<dim_grid, dim_block>>>(cuda_a, cuda_b, cuda_c, d_shape.first, d_shape.second, matrix.shape().second);
+        dim3 dim_grid((d3 + 31) / 32, (d1 + 31) / 32, 1);
+        gpu::matmul<<<dim_grid, dim_block>>>(cuda_a, cuda_b, cuda_c, d1, d2, d3);
 
-        err = cudaMemcpy(c, cuda_c, Nc * sizeof(float), cudaMemcpyDeviceToHost);
+        err = cudaMemcpy(c, cuda_c, d1 * d3 * sizeof(float), cudaMemcpyDeviceToHost);
         cuda_check(err, __FILE__, __LINE__);
 
         Matrix result = Matrix(c, d_shape.first, matrix.shape().second);

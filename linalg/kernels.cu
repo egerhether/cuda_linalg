@@ -48,7 +48,7 @@ namespace gpu {
 
         if (idx < d1 && jdx < d3) {
             float val = 0;
-            for (int kdx = 0; kdx != d2; ++kdx)
+            for (int kdx = 0; kdx < d2; ++kdx)
                 val += a[idx * d2 + kdx] * b[kdx * d3 + jdx];
 
             result[idx * d3 + jdx] = val;
@@ -106,13 +106,15 @@ namespace gpu {
     __global__ void pivot(float *arr, int N, int current_idx)
     {
         int jdx = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (jdx < 2 * N) {
+            float pivot_val = arr[current_idx * 2 * N + current_idx];
+            if (pivot_val == 0.0f)
+                return;
+            arr[current_idx * 2 * N + jdx] /= pivot_val;
+        }
         if (jdx >= 2 * N)
             return;
-
-        float pivot_val = arr[current_idx * 2 * N + current_idx];
-        if (pivot_val == 0.0f)
-            return;
-        arr[current_idx * 2 * N + jdx] /= pivot_val;
     }
 
     __global__ void inv(float *arr, int N, int idx)
