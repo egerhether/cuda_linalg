@@ -74,14 +74,18 @@ namespace linalg {
 
         int N = d_shape.first;
 
-        float *cuda_a, *cuda_augmented;
+        double *cuda_a, *cuda_augmented;
 
-        cudaError_t err = cudaMalloc(&cuda_a, N * N * sizeof(float));
+        cudaError_t err = cudaMalloc(&cuda_a, N * N * sizeof(double));
         cuda_check(err, __FILE__, __LINE__);
-        err = cudaMalloc(&cuda_augmented, N * N * 2 * sizeof(float));
+        err = cudaMalloc(&cuda_augmented, N * N * 2 * sizeof(double));
         cuda_check(err, __FILE__, __LINE__);
 
-        err = cudaMemcpy(cuda_a, d_data, N * N * sizeof(float), cudaMemcpyHostToDevice);
+        double *double_data = new double[N * N];
+        for (int idx = 0; idx != N * N; ++idx)
+            double_data[idx] = static_cast<double>(d_data[idx]);
+
+        err = cudaMemcpy(cuda_a, double_data, N * N * sizeof(double), cudaMemcpyHostToDevice);
         cuda_check(err, __FILE__, __LINE__);
 
         int threads = (N > 32) ? 32 : N;
@@ -93,8 +97,10 @@ namespace linalg {
         cudaDeviceSynchronize();
 
         block_size = dim3(2 * threads, threads);
+        grid_size = dim3((N + 2 * threads - 1) / (2 * threads), (N + threads - 1) / threads, 1);
 
         for (int idx = 0; idx != N; ++idx) {
+
             // divide by pivot
             int blocks = (2 * N * N + 32 - 1) / 32;
             gpu::pivot<<<blocks, 32>>>(cuda_augmented, N, idx);
@@ -106,12 +112,17 @@ namespace linalg {
         }
 
         // copy back to NxN array
-        gpu::copy_from_aug<<<grid_size, block_size>>>(cuda_augmented, cuda_a, N);
+        float *cuda_a_f;
+
+        err = cudaMalloc(&cuda_a_f, N * N * sizeof(float));
+        cuda_check(err, __FILE__, __LINE__);
+
+        gpu::copy_from_aug<<<grid_size, block_size>>>(cuda_augmented, cuda_a_f, N);
         cudaDeviceSynchronize();
 
         float *inv = new float[N * N];
 
-        err = cudaMemcpy(inv, cuda_a, N * N * sizeof(float), cudaMemcpyDeviceToHost);
+        err = cudaMemcpy(inv, cuda_a_f, N * N * sizeof(float), cudaMemcpyDeviceToHost);
         cuda_check(err, __FILE__, __LINE__);
 
         Matrix inverse(inv, d_shape.first, d_shape.second);
@@ -119,6 +130,7 @@ namespace linalg {
         delete[] inv;
 
         cudaFree(cuda_a);
+        cudaFree(cuda_a_f);
         cudaFree(cuda_augmented);
 
         return inverse;

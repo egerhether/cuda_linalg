@@ -116,9 +116,7 @@ void test_inverse(int size)
 
     // difference
     linalg::Matrix diff = inverse - inverse_cpu;
-    inverse.print();
     linalg::Matrix id = inverse * to_inv;
-    id.print();
     float err = diff.norm();
     std::cout << "Difference between results: " << err << "\n\n";
 }
@@ -129,7 +127,7 @@ int main(int argc, char **argv)
         int size = 10000;
 
         if (argc != 1 && strcmp(argv[1], "-d") == 0) {
-            test_inverse(size);
+            test_inverse(50);
             return 0;
         }
 

@@ -11,10 +11,10 @@ namespace gpu {
     __global__ void div(float *a, float val, float *result, int N);
     __global__ void div(float *a, float *b, float *result, int N);
     __global__ void transpose(float *arr, float *target, int d1, int d2, int block_rows);
-    __global__ void augmented(float *arr, float *target, int N);
-    __global__ void pivot(float *arr, int N, int current_idx);
-    __global__ void copy_from_aug(float *aug, float *arr, int N);
-    __global__ void inv(float *arr, int N, int idx);
+    __global__ void augmented(double *arr, double *target, int N);
+    __global__ void pivot(double *arr, int N, int current_idx);
+    __global__ void copy_from_aug(double *aug, float *arr, int N);
+    __global__ void inv(double *arr, int N, int idx);
     __global__ void fill(float *arr, float val, int N);
     __global__ void copy(float *arr, float *target, int N);
 }

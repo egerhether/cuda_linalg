@@ -92,7 +92,7 @@ namespace gpu {
                 target[(jdx + kdx) * d1 + idx] = tile[threadIdx.x][threadIdx.y + kdx];
     }
 
-    __global__ void augmented(float *arr, float *target, int N)
+    __global__ void augmented(double *arr, double *target, int N)
     {
         int jdx = blockDim.x * blockIdx.x + threadIdx.x;
         int idx = blockDim.y * blockIdx.y + threadIdx.y;
@@ -103,7 +103,7 @@ namespace gpu {
         }
     }
 
-    __global__ void pivot(float *arr, int N, int current_idx)
+    __global__ void pivot(double *arr, int N, int current_idx)
     {
         int jdx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -117,7 +117,7 @@ namespace gpu {
             return;
     }
 
-    __global__ void inv(float *arr, int N, int idx)
+    __global__ void inv(double *arr, int N, int idx)
     {
         int jdx = blockDim.x * blockIdx.x + threadIdx.x;
         int kdx = blockDim.y * blockIdx.y + threadIdx.y;
@@ -131,12 +131,12 @@ namespace gpu {
         }
     }
 
-    __global__ void copy_from_aug(float *aug, float *arr, int N)
+    __global__ void copy_from_aug(double *aug, float *arr, int N)
     {
         int idx = blockDim.x * blockIdx.x + threadIdx.x;
         int jdx = blockDim.y * blockIdx.y + threadIdx.y;
         if (idx < N && jdx < N)
-            arr[idx * N + jdx] = aug[idx * 2 * N + jdx + N];
+            arr[idx * N + jdx] = __double2float_rn(aug[idx * 2 * N + jdx + N]);
     }
 
     __global__ void fill(float *arr, float val, int N)
